@@ -22,8 +22,6 @@ def pre_save(sender, instance, **kwagrs):
     instance.price_real = price_n * price_s
 
 
-
-
 def showmedia(request):
     page = int(request.GET.get('page', 1))
     paginated_by = 5
@@ -34,8 +32,6 @@ def showmedia(request):
     end_index = paginated_by * page
     rooms = rooms[start_index:end_index]
     rng = range(1, math.ceil(total_count / paginated_by) + 1)
-
-
 
     context = {
         'object_list': rooms,
@@ -55,7 +51,7 @@ def search(request):
 
     search_p = None
     obj_list = None
-
+    address_results = list()
     if not (search_key or cb_list or min_price or max_price):
         obj_list = Media.objects.all()
 
@@ -77,6 +73,8 @@ def search(request):
             search_p = Q(price_real__gte=min_price)
 
             obj_list = Media.objects.filter(search_p)
+            # list => 주소 뽑아서 => 함수 실행 => 좌표를 찍기
+
 
         # 최대 가격 조건만 있는 경우
         elif max_price and not min_price:
@@ -104,12 +102,22 @@ def search(request):
     if search_key and search_p:
         search_p = Q(address__icontains=search_key) | Q(name__icontains=search_key)
         obj_list = obj_list & Media.objects.filter(search_p)
+
+        # address_results = list()
+        for object in obj_list:
+            address_results.append(create_address(object.address))
+            print(object.address)
     # 둘중 하나만 있는 경우
     else:
         # 검색어만 있는 경우
         if search_key or not obj_list:
             search_p = Q(address__icontains=search_key) | Q(name__icontains=search_key)
             obj_list = Media.objects.filter(search_p)
+
+            # address_results = list()
+            for object in obj_list:
+                address_results.append(create_address(object.address))
+                print(object.address)
 
         # 가격 조건만 있는 경우는 이미 위에서 obj_list를 만듬
 
@@ -125,12 +133,37 @@ def search(request):
 
         else:
             obj_list = obj_list & Media.objects.filter(temp_p)
-
+    # create_address(document.address)
     return render(request, 'room/search_list.html',
                   {
-                      'object_list': obj_list,
+                      'object_list': obj_list, 'address_results': address_results
                   }
                   )
+
+
+def create_address(address):
+    naver_url = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?query=" + address
+    custom_headers = {
+        "X-NCP-APIGW-API-KEY-ID": 'b4wnbq4cd7',
+        "X-NCP-APIGW-API-KEY": "8o4ERGCLrQgfFb9qoXRmJELLQBI6N3kHxUjELMXX"
+    }
+    # road address API - setting
+    confmkey = "U01TX0FVVEgyMDE5MDUyMzAwNDAwMzEwODc0Nzc="
+    road_url = "http://www.juso.go.kr/addrlink/addrLinkApi.do?keyword=" + address + "&confmKey=" + confmkey + "&resultType=json"
+
+    # # requests of both API
+    naver_req = requests.get(naver_url, headers=custom_headers)
+    road_req = requests.get(road_url)
+    result = list()
+    # jb_address = road_req.json()["results"]["juso"][0]['jibunAddr']
+    # rd_address = road_req.json()["results"]["juso"][0]['roadAddr']
+    # coord_lat = naver_req.json()["addresses"][0]["x"]
+    # coord_long = naver_req.json()["addresses"][0]["y"]
+    result.append(road_req.json()["results"]["juso"][0]['jibunAddr'])
+    result.append(road_req.json()["results"]["juso"][0]['roadAddr'])
+    result.append(naver_req.json()["addresses"][0]["x"])
+    result.append(naver_req.json()["addresses"][0]["y"])
+    return result
 
 
 def detail(request, pk):
@@ -141,29 +174,28 @@ def detail(request, pk):
         full_address = document.address + " " + document.address_detail
         # full_address = 도로명 주소 + 상세 주소
         # 예)성수동 상원길 63 쌍용아파트 107동 101호 = 상원길 63 + 쌍용아파트 107동 101호
-
+        result = create_address(address)
         # naver geocoding API - setting
-        naver_url = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?query=" + address
-        custom_headers = {
-            "X-NCP-APIGW-API-KEY-ID": 'b4wnbq4cd7',
-            "X-NCP-APIGW-API-KEY": "8o4ERGCLrQgfFb9qoXRmJELLQBI6N3kHxUjELMXX"
-        }
-        # road address API - setting
-        confmkey = "U01TX0FVVEgyMDE5MDUyMzAwNDAwMzEwODc0Nzc="
-        road_url = "http://www.juso.go.kr/addrlink/addrLinkApi.do?keyword=" + address + "&confmKey=" + confmkey + "&resultType=json"
-
-        # requests of both API
-        naver_req = requests.get(naver_url, headers=custom_headers)
-        road_req = requests.get(road_url)
-        jb_address = road_req.json()["results"]["juso"][0]['jibunAddr']
-        rd_address = road_req.json()["results"]["juso"][0]['roadAddr']
-        coord_lat = naver_req.json()["addresses"][0]["x"]
-        coord_long = naver_req.json()["addresses"][0]["y"]
+        # naver_url = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?query=" + address
+        # custom_headers = {
+        #     "X-NCP-APIGW-API-KEY-ID": 'b4wnbq4cd7',
+        #     "X-NCP-APIGW-API-KEY": "8o4ERGCLrQgfFb9qoXRmJELLQBI6N3kHxUjELMXX"
+        # }
+        # # road address API - setting
+        # confmkey = "U01TX0FVVEgyMDE5MDUyMzAwNDAwMzEwODc0Nzc="
+        # road_url = "http://www.juso.go.kr/addrlink/addrLinkApi.do?keyword=" + address + "&confmKey=" + confmkey + "&resultType=json"
+        #
+        # # # requests of both API
+        # naver_req = requests.get(naver_url, headers=custom_headers)
+        # road_req = requests.get(road_url)
+        # jb_address = road_req.json()["results"]["juso"][0]['jibunAddr']
+        # rd_address = road_req.json()["results"]["juso"][0]['roadAddr']
+        # coord_lat = naver_req.json()["addresses"][0]["x"]
+        # coord_long = naver_req.json()["addresses"][0]["y"]
         return render(request, 'room/media_detail.html', {'object': document,
                                                           'extension': vdo,
-                                                          'address': address, 'coord_lat': coord_lat,
-                                                          'coord_long': coord_long, 'jb_address': jb_address,
-                                                          'rd_address': rd_address,
+                                                          'address': address, 'coord_lat': result[2],
+                                                          'coord_long': result[3], 'jb_address': result[0],
+                                                          'rd_address': result[1],
                                                           'full_address': full_address,
                                                           })
-
